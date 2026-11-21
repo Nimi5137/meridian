@@ -28,11 +28,15 @@ function docxXml(buffer: Buffer): Promise<string> {
  });
 }
 function xmlText(xml:string):string {
- let insideText=false; let result=''; const parser=new SaxesParser();
+ // DOCX producers may use any XML prefix. Compare the namespace, not the
+ // literal "w:" prefix, and do not mistake unrelated XML for document text.
+ const wordNamespaces=new Set(['http://schemas.openxmlformats.org/wordprocessingml/2006/main','http://purl.oclc.org/ooxml/wordprocessingml/main']);
+ let insideText=false; let result=''; const parser=new SaxesParser({xmlns:true});
+ const append=(value:string)=>{if(result.length+value.length>MAX_TEXT)throw new Error('Document text too long');result+=value;};
  parser.on('doctype',()=>{throw new Error('DOCX document contains a DTD');});
- parser.on('opentag',tag=>{if(tag.name==='w:t') insideText=true; if(tag.name==='w:tab') result+='\t';});
- parser.on('text',text=>{if(insideText) result+=text; if(result.length>MAX_TEXT) throw new Error('Document text too long');});
- parser.on('closetag',tag=>{if(tag.name==='w:t')insideText=false;if(tag.name==='w:p')result+='\n';});
+ parser.on('opentag',tag=>{if(!wordNamespaces.has(tag.uri))return;if(tag.local==='t')insideText=true;else if(tag.local==='tab')append('\t');else if(tag.local==='br'||tag.local==='cr')append('\n');});
+ parser.on('text',text=>{if(insideText)append(text);});
+ parser.on('closetag',tag=>{if(!wordNamespaces.has(tag.uri))return;if(tag.local==='t')insideText=false;else if(tag.local==='p')append('\n');});
  try {parser.write(xml).close();} catch {throw new Error('DOCX document text is invalid or too long');}
  return result.trim();
 }
