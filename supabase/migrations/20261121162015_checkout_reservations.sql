@@ -1,0 +1,6 @@
+create table public.billing_checkout_reservations (user_id uuid primary key references auth.users(id) on delete cascade, token uuid not null, expires_at timestamptz not null);
+alter table public.billing_checkout_reservations enable row level security;
+create function public.claim_checkout(p_user uuid) returns uuid language plpgsql security definer set search_path='' as $$ declare result uuid; begin insert into public.billing_checkout_reservations(user_id,token,expires_at) values(p_user,gen_random_uuid(),now()+interval '35 minutes') on conflict(user_id) do update set token=gen_random_uuid(),expires_at=now()+interval '35 minutes' where public.billing_checkout_reservations.expires_at<now() returning token into result; return result; end $$;
+create function public.release_checkout(p_user uuid,p_token uuid) returns void language sql security definer set search_path='' as $$ delete from public.billing_checkout_reservations where user_id=p_user and token=p_token $$;
+revoke all on function public.claim_checkout(uuid) from public; revoke all on function public.release_checkout(uuid,uuid) from public;
+grant execute on function public.claim_checkout(uuid) to service_role; grant execute on function public.release_checkout(uuid,uuid) to service_role;

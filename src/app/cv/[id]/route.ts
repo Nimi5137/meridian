@@ -1,0 +1,4 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { requireUser } from '@/lib/auth';
+export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}) {const {id}=await params;if(!z.string().uuid().safeParse(id).success) return new Response('Not found',{status:404});const {db,user}=await requireUser();const {data,error}=await db.from('original_cvs').select('storage_path,filename').eq('id',id).eq('user_id',user.id).maybeSingle();if(error||!data)return new Response('Not found',{status:404});const signed=await db.storage.from('career-documents').createSignedUrl(data.storage_path,60,{download:data.filename});if(signed.error||!signed.data)return new Response('Could not retrieve document',{status:500});return NextResponse.redirect(signed.data.signedUrl,{headers:{'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'}});}

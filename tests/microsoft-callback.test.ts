@@ -1,0 +1,17 @@
+import {describe,it,expect,vi,beforeEach,afterEach} from 'vitest';
+vi.mock('server-only',()=>({}));
+const {getCookie,setCookie,rpc,getUser}=vi.hoisted(()=>({getCookie:vi.fn(),setCookie:vi.fn(),rpc:vi.fn(),getUser:vi.fn()}));
+vi.mock('next/headers',()=>({cookies:async()=>({get:getCookie,set:setCookie})}));
+vi.mock('../src/lib/supabase/server',()=>({createClient:async()=>({auth:{getUser}})}));
+vi.mock('../src/lib/supabase/admin',()=>({adminClient:()=>({rpc})}));
+import {GET} from '../src/app/api/integrations/microsoft/callback/route';
+import {seal,unseal} from '../src/lib/integrations/crypto';
+import {hashOAuthValue} from '../src/lib/integrations/google';
+import {microsoftStateContext,microsoftTokenContext} from '../src/lib/integrations/microsoft-store';
+const uid='00000000-0000-4000-8000-000000000151',state='s'.repeat(43),verifier='v'.repeat(43);
+beforeEach(()=>{vi.clearAllMocks();process.env.INTEGRATION_ENCRYPTION_KEY=Buffer.alloc(32,7).toString('base64');process.env.MICROSOFT_OAUTH_CLIENT_ID='client';process.env.MICROSOFT_OAUTH_CLIENT_SECRET='client-secret';process.env.SUPABASE_SERVICE_ROLE_KEY='server';process.env.NEXT_PUBLIC_SUPABASE_URL='https://example.org';process.env.NEXT_PUBLIC_APP_URL='https://app.example.org';getUser.mockResolvedValue({data:{user:{id:uid}},error:null});});afterEach(()=>vi.unstubAllGlobals());
+describe('Microsoft OAuth callback',()=>{
+ it('rejects mismatched browser state without accessing the database',async()=>{getCookie.mockReturnValue({value:'x'.repeat(43)});const result=await GET(new Request(`https://evil.example/api/integrations/microsoft/callback?state=${state}&code=abc`));expect(result.headers.get('location')).toMatch(/^https:\/\/app\.example\.org\/settings\/integrations/);expect(rpc).not.toHaveBeenCalled();});
+ it('claims user-bound state and stores encrypted provider tokens',async()=>{getCookie.mockReturnValue({value:state});const hash=hashOAuthValue(state);rpc.mockResolvedValueOnce({data:{kind:'outlook',verifier:seal(verifier,microsoftStateContext(uid,hash))},error:null}).mockResolvedValueOnce({data:true,error:null});vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({access_token:'access-secret',refresh_token:'refresh-secret',expires_in:3600,token_type:'Bearer',scope:'openid User.Read Mail.ReadBasic'}))).mockResolvedValueOnce(new Response(JSON.stringify({id:'user',mail:'user@example.org'}))));const result=await GET(new Request(`https://app.example.org/api/integrations/microsoft/callback?state=${state}&code=abc`));expect(result.headers.get('location')).toBe('https://app.example.org/settings/integrations?connected=1');expect(rpc).toHaveBeenNthCalledWith(1,'claim_integration_oauth',{p_user:uid,p_hash:hash});const args=rpc.mock.calls[1][1];expect(args.p_ciphertext).not.toContain('refresh-secret');expect(JSON.parse(unseal(args.p_ciphertext,microsoftTokenContext(uid,'outlook')))).toMatchObject({accessToken:'access-secret',refreshToken:'refresh-secret'});expect(setCookie).toHaveBeenCalledWith('microsoft_oauth_state','',expect.objectContaining({maxAge:0,path:'/api/integrations/microsoft/callback'}));});
+ it('does not exchange a replayed state',async()=>{getCookie.mockReturnValue({value:state});rpc.mockResolvedValueOnce({data:null,error:null});const f=vi.fn();vi.stubGlobal('fetch',f);const result=await GET(new Request(`https://app.example.org/api/integrations/microsoft/callback?state=${state}&code=abc`));expect(result.headers.get('location')).toContain('error=');expect(f).not.toHaveBeenCalled();});
+});

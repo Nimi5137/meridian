@@ -1,0 +1,3 @@
+import {describe,it,expect} from 'vitest';
+import {isIntegrationAdmin,readiness} from '../src/lib/readiness';
+describe('readiness',()=>{it('restricts administrator IDs exactly',()=>{expect(isIntegrationAdmin('abc',{INTEGRATION_ADMIN_USER_IDS:' abc,def '})).toBe(true);expect(isIntegrationAdmin('a',{INTEGRATION_ADMIN_USER_IDS:'abc'})).toBe(false);});it('never returns secret values and does not claim connectivity',()=>{const output=JSON.stringify(readiness({GROQ_API_KEY:'sensitive-key',GROQ_MODEL:'test'}));expect(output).not.toContain('sensitive-key');expect(output).toContain('configured; unverified');expect(output).toContain('not implemented');});});

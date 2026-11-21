@@ -1,0 +1,10 @@
+create table public.career_entries (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, kind text not null check(kind in ('experience','education','project','certification','volunteering','award','publication')), title text not null check(length(title) between 1 and 200), organization text not null default '' check(length(organization)<=200), start_date date, end_date date, description text not null default '' check(length(description)<=6000), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), check(end_date is null or start_date is null or end_date >= start_date));
+create index career_entries_user_idx on public.career_entries(user_id, start_date desc);
+alter table public.career_entries enable row level security;
+create policy career_entry_select on public.career_entries for select to authenticated using(user_id=(select auth.uid()));
+create policy career_entry_insert on public.career_entries for insert to authenticated with check(user_id=(select auth.uid()));
+create policy career_entry_update on public.career_entries for update to authenticated using(user_id=(select auth.uid())) with check(user_id=(select auth.uid()));
+create policy career_entry_delete on public.career_entries for delete to authenticated using(user_id=(select auth.uid()));
+grant select,insert,update,delete on public.career_entries to authenticated;
+create function public.touch_profile_on_career_entry() returns trigger language plpgsql security definer set search_path = '' as $$ begin insert into public.profiles(user_id,updated_at) values(coalesce(new.user_id,old.user_id),clock_timestamp()) on conflict(user_id) do update set updated_at=clock_timestamp(); return coalesce(new,old); end $$;
+create trigger career_entry_profile_version after insert or update or delete on public.career_entries for each row execute function public.touch_profile_on_career_entry();

@@ -1,0 +1,1 @@
+export function hasPaidAiEntitlement(subscriptions:{status:string;price_id:string}[], configuredPriceIds:string[]):boolean {return subscriptions.some(s=>['active','trialing'].includes(s.status)&&configuredPriceIds.includes(s.price_id));}

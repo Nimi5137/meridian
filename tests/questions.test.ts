@@ -1,0 +1,3 @@
+import {describe,it,expect} from 'vitest';
+import {questionSchema} from '../src/lib/applications/questions';
+describe('application question review',()=>{it('permits unanswered questions until review',()=>expect(questionSchema.safeParse({question:'Availability?',answer:'',sensitive:true,confirmed:false}).success).toBe(true));it('rejects confirming an empty answer',()=>expect(questionSchema.safeParse({question:'Availability?',answer:' ',sensitive:true,confirmed:true}).success).toBe(false));it('accepts explicitly confirmed answers',()=>expect(questionSchema.safeParse({question:'Availability?',answer:'Next month',sensitive:true,confirmed:true}).success).toBe(true));});

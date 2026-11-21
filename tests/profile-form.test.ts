@@ -1,0 +1,20 @@
+import {describe,it,expect,vi,beforeEach} from 'vitest';
+import {changedProfileFields,type ProfileFormState,type ProfileValues} from '../src/lib/cv/profile-form';
+vi.mock('server-only',()=>({}));
+const {rpc,revalidate}=vi.hoisted(()=>({rpc:vi.fn(),revalidate:vi.fn()}));
+vi.mock('../src/lib/auth',()=>({requireUser:async()=>({db:{rpc},user:{id:'user'}})}));
+vi.mock('../src/lib/supabase/server',()=>({createClient:vi.fn()}));
+vi.mock('next/cache',()=>({revalidatePath:revalidate}));
+vi.mock('next/navigation',()=>({redirect:vi.fn()}));
+import {saveProfile} from '../src/app/actions';
+const values:ProfileValues={full_name:'Candidate',headline:'',location:'',summary:'My background',skills:'',desired_roles:'',work_preferences:''};
+function form(version='old',overwrite=false){const form=new FormData();for(const [key,value] of Object.entries(values))form.set(key,value);form.set('version',version);if(overwrite)form.set('overwrite','yes');return form;}
+const initial:ProfileFormState={kind:'idle',message:'',version:'old'};
+describe('profile conflict handling',()=>{beforeEach(()=>vi.clearAllMocks());
+ it('compares saved values with trimmed form values',()=>{expect(changedProfileFields({...values,full_name:' Candidate ',summary:'Changed'},values)).toEqual(['summary']);});
+ it('retains the exact server version after a successful save',async()=>{rpc.mockResolvedValue({data:{outcome:'saved',version:'2026-01-01T00:00:00.123456+00:00'},error:null});const state=await saveProfile(initial,form());expect(state).toMatchObject({kind:'saved',version:'2026-01-01T00:00:00.123456+00:00'});expect(rpc).toHaveBeenCalledWith('save_profile_if_unchanged',expect.objectContaining({p_expected:'old',p_profile:values}));expect(revalidate).toHaveBeenCalledWith('/profile');});
+ it('returns current data and version on a conflict without writing again',async()=>{rpc.mockResolvedValue({data:{outcome:'changed',profile:{...values,summary:'Newer',updated_at:'new'}},error:null});const state=await saveProfile(initial,form());expect(state).toMatchObject({kind:'conflict',version:'new',current:{summary:'Newer'}});expect(rpc).toHaveBeenCalledTimes(1);});
+ it('requires explicit review before replacing conflicting data',async()=>{const previous:ProfileFormState={kind:'conflict',message:'',version:'new',current:values};const result=await saveProfile(previous,form('new'));expect(result.kind).toBe('conflict');expect(rpc).not.toHaveBeenCalled();});
+ it('keeps conflict state after a failed confirmation attempt',async()=>{const previous:ProfileFormState={kind:'conflict',message:'',version:'new',current:values};rpc.mockResolvedValue({data:null,error:{message:'offline'}});const result=await saveProfile(previous,form('new',true));expect(result.kind).toBe('conflict');expect(result.version).toBe('new');});
+ it('handles a further server-side change after explicit confirmation',async()=>{const previous:ProfileFormState={kind:'conflict',message:'',version:'new',current:values};rpc.mockResolvedValue({data:{outcome:'changed',profile:{...values,location:'Elsewhere',updated_at:'newer'}},error:null});const state=await saveProfile(previous,form('new',true));expect(state).toMatchObject({kind:'conflict',version:'newer',current:{location:'Elsewhere'}});});
+});

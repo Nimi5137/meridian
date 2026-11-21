@@ -1,0 +1,14 @@
+create table public.profile_imports (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, original_cv_id uuid not null references public.original_cvs(id) on delete cascade, proposed jsonb not null, status text not null default 'pending' check (status in ('pending','reviewed')), provider text not null, model text not null, created_at timestamptz not null default now(), reviewed_at timestamptz);
+create index profile_imports_user_idx on public.profile_imports(user_id, created_at desc);
+alter table public.profile_imports enable row level security;
+create policy profile_import_read on public.profile_imports for select to authenticated using (user_id=(select auth.uid()));
+create policy profile_import_insert on public.profile_imports for insert to authenticated with check (user_id=(select auth.uid()) and exists (select 1 from public.original_cvs c where c.id=original_cv_id and c.user_id=(select auth.uid())));
+create policy profile_import_update on public.profile_imports for update to authenticated using (user_id=(select auth.uid())) with check (user_id=(select auth.uid()) and exists (select 1 from public.original_cvs c where c.id=original_cv_id and c.user_id=(select auth.uid())));
+grant select, insert, update on public.profile_imports to authenticated;
+create table public.job_matches (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, job_id uuid not null references public.jobs(id) on delete cascade, analysis jsonb not null, provider text not null, model text not null, profile_updated_at timestamptz, job_verified_at timestamptz, created_at timestamptz not null default now(), unique(user_id,job_id));
+create index job_matches_user_idx on public.job_matches(user_id,created_at desc);
+alter table public.job_matches enable row level security;
+create policy job_match_read on public.job_matches for select to authenticated using (user_id=(select auth.uid()));
+create policy job_match_insert on public.job_matches for insert to authenticated with check (user_id=(select auth.uid()));
+create policy job_match_update on public.job_matches for update to authenticated using (user_id=(select auth.uid())) with check (user_id=(select auth.uid()));
+grant select,insert,update on public.job_matches to authenticated;

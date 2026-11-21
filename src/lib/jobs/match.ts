@@ -1,0 +1,4 @@
+import {z} from 'zod';
+const list=z.array(z.string().min(1).max(500)).max(8);
+export const matchSchema=z.object({score:z.number().int().min(0).max(100),explanation:z.string().min(1).max(2000),strengths:list,gaps:list,eligibility_concerns:list,opportunities:list}).strict();
+export const matchInstruction='Return a JSON object with exactly these keys: score (integer 0 to 100), explanation (string), strengths (array of strings), gaps (array of strings), eligibility_concerns (array of strings), opportunities (array of strings). Assess only explicit profile and job information; say when evidence is missing. Identify mandatory requirements separately in eligibility_concerns. Never infer work authorization, protected characteristics or qualifications. Score measures fit, not likelihood of an interview or offer.';
