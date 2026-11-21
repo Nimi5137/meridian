@@ -8,8 +8,3 @@ export function careerEntryVersion(value:FormDataEntryValue|null):string|null {
  if(typeof value!=='string'||value.length>80||!z.iso.datetime({offset:true}).safeParse(value).success||!Number.isFinite(Date.parse(value)))return null;
  return value;
 }
-/** Ensure consecutive app writes have distinct versions even within one millisecond. */
-export function nextCareerEntryVersion(previous:string,now=Date.now()):string {
- const time=Math.max(now,Date.parse(previous)+1);
- return new Date(time).toISOString();
-}

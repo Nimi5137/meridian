@@ -1,0 +1,20 @@
+import {beforeEach,describe,expect,it,vi} from 'vitest';
+vi.mock('server-only',()=>({}));
+const m=vi.hoisted(()=>({from:vi.fn(),access:vi.fn(),config:vi.fn(),tracked:vi.fn(),generate:vi.fn(),filters:[] as [string,string,unknown][]}));
+vi.mock('@/lib/auth',()=>({requireUser:async()=>({db:{from:m.from},user:{id:'owner'}})}));
+vi.mock('@/lib/billing/access',()=>({hasAiAccess:m.access}));
+vi.mock('@/lib/ai/service',()=>({aiForTask:m.config}));
+vi.mock('@/lib/ai/usage',()=>({trackedAdapter:m.tracked}));
+import {generateInterviewCoach} from '../src/app/applications/[id]/interview-prep/actions';
+const id='5bca9447-210f-4c10-90a5-e77b862651a0';
+const initial={kind:'idle' as const,message:''};
+function form(value=id){const f=new FormData();f.set('application_id',value);return f;}
+let responses:Record<string,unknown>;
+beforeEach(()=>{vi.clearAllMocks();m.filters=[];responses={applications:{data:{id,jobs:{title:'Engineer',company:'Example',description:'A role'}},error:null},profiles:{data:{headline:'Developer',summary:'Built tools',skills:'TypeScript',desired_roles:'',work_preferences:''},error:null},career_entries:{data:[{kind:'experience',title:'Engineer',description:'Built tools'}],error:null}};m.from.mockImplementation((table:string)=>{const q={select:()=>q,eq:(column:string,value:unknown)=>{m.filters.push([table,column,value]);return q;},order:()=>q,limit:async()=>responses[table],maybeSingle:async()=>responses[table]};return q;});m.access.mockResolvedValue(true);m.config.mockReturnValue({provider:'groq',model:'test',adapter:{}});m.tracked.mockResolvedValue({generate:m.generate});m.generate.mockResolvedValue({text:'Practice question?',provider:'groq',model:'test'});});
+describe('optional interview coach',()=>{
+ it('checks entitlement and owner scopes all candidate data before an opt-in provider call',async()=>{const result=await generateInterviewCoach(initial,form());expect(result).toMatchObject({kind:'ready',text:'Practice question?',provider:'groq',model:'test'});expect(m.filters.filter(([,column])=>column==='user_id')).toEqual([['applications','user_id','owner'],['profiles','user_id','owner'],['career_entries','user_id','owner']]);expect(m.config).toHaveBeenCalledWith('interview');expect(m.tracked).toHaveBeenCalledWith(expect.anything(),'interview',expect.anything());const request=m.generate.mock.calls[0][0];expect(request.system).toContain('never invent');expect(request.prompt).toContain('Built tools');expect(request.prompt).toContain('A role');});
+ it('does not call a provider for an inaccessible application',async()=>{responses.applications={data:null,error:null};expect((await generateInterviewCoach(initial,form())).kind).toBe('error');expect(m.tracked).not.toHaveBeenCalled();expect(m.generate).not.toHaveBeenCalled();});
+ it('denies invalid ids and missing subscription before querying personal data',async()=>{expect((await generateInterviewCoach(initial,form('invalid'))).kind).toBe('error');expect(m.from).not.toHaveBeenCalled();m.access.mockResolvedValue(false);expect((await generateInterviewCoach(initial,form())).kind).toBe('error');expect(m.from).not.toHaveBeenCalled();});
+ it('fails closed for oversized input, quota errors, and provider failure',async()=>{responses.career_entries={data:Array.from({length:51},()=>({title:'x'})),error:null};expect((await generateInterviewCoach(initial,form())).kind).toBe('error');expect(m.tracked).not.toHaveBeenCalled();responses.career_entries={data:[],error:null};m.tracked.mockRejectedValueOnce(new Error('quota'));expect((await generateInterviewCoach(initial,form())).kind).toBe('error');expect(m.generate).not.toHaveBeenCalled();m.generate.mockRejectedValueOnce(new Error('private provider error'));const failed=await generateInterviewCoach(initial,form());expect(failed.kind).toBe('error');expect(failed.message).not.toContain('private provider error');});
+ it('rejects oversized output without returning it',async()=>{m.generate.mockResolvedValue({text:'x'.repeat(12001),provider:'groq',model:'test'});const result=await generateInterviewCoach(initial,form());expect(result.kind).toBe('error');expect(result.text).toBeUndefined();});
+});

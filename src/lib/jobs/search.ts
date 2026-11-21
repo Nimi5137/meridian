@@ -1,6 +1,6 @@
 import type {Source} from './connectors';
 export type SearchParam=string|string[]|undefined;
-export const sources=['greenhouse','lever','ashby','smartrecruiters'] as const;
+export const sources=['greenhouse','lever','lever_eu','ashby','smartrecruiters'] as const;
 export function firstParam(value:SearchParam):string{return typeof value==='string'?value:Array.isArray(value)?value[0]||'':'';}
 export function parseJobSearch(params:{q?:SearchParam;source?:SearchParam;sort?:SearchParam;page?:SearchParam}) {
  const q=firstParam(params.q).trim().slice(0,100);

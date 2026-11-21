@@ -1,7 +1,7 @@
 import 'server-only';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import type {Adapter,Provider,Task} from './service';
-type UsageTask=Extract<Task,'extraction'|'matching'|'cv'|'cover_letter'>|'readiness';
+type UsageTask=Extract<Task,'extraction'|'matching'|'cv'|'cover_letter'|'interview'>|'readiness';
 type Configured={adapter:Adapter;provider:Provider;model:string};
 const validTokens=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<=100_000_000?value:null;
 /** One quota reservation and one provider call. Records are observations, not billing-grade evidence. */

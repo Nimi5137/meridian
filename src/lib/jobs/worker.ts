@@ -5,7 +5,7 @@ import {fetchBoard} from './connectors';
 
 const claimSchema=z.object({
  task_id:z.string().uuid(),token:z.string().uuid(),
- source:z.enum(['greenhouse','lever','ashby','smartrecruiters']),
+ source:z.enum(['greenhouse','lever','lever_eu','ashby','smartrecruiters']),
  board:z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
  company:z.string().min(1).max(200).refine(value=>!!value.trim()),
 });

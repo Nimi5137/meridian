@@ -3,6 +3,7 @@ import {notFound} from 'next/navigation';
 import {z} from 'zod';
 import {requireUser} from '@/lib/auth';
 import {Shell} from '@/components/Shell';
+import {CoachForm} from './CoachForm';
 import {PreparationNotes} from './PreparationNotes';
 
 export default async function InterviewPreparation({params}:{params:Promise<{id:string}>}) {
@@ -19,6 +20,7 @@ export default async function InterviewPreparation({params}:{params:Promise<{id:
   <div className="page-heading"><div className="eyebrow"><span className="eyebrow-dot"/> PLAN YOUR CONVERSATION</div><h1>Prepare for your interview<span>.</span></h1><p>{role} · {company}</p></div>
   <Link href={`/applications/${id}`} className="back-link">← Back to application</Link>
   <PreparationNotes role={role} company={company}/>
+  <CoachForm applicationId={id}/>
   <section className="panel form-section"><div className="overline">YOUR SAVED BACKGROUND</div><h3>Possible stories to revisit</h3><p>These are your saved career entries, not suggested claims or verified facts. Choose only examples you can accurately explain.</p>
    {entries.error?<div className="alert error">Could not load career entries.</div>:entries.data?.length?<ul>{entries.data.map(entry=><li key={entry.id}><Link href={`/profile/entries/${entry.id}`}>{entry.title}</Link>{entry.organization?` · ${entry.organization}`:''} <small>({entry.kind})</small></li>)}</ul>:<p>No career entries saved yet. You can prepare without one, or <Link href="/profile/entries/new">add an entry</Link>.</p>}
    <p className="disclaimer">Up to 20 entries are shown. Opening a link leaves this page; download any notes first.</p>
