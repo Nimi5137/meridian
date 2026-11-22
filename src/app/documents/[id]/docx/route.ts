@@ -1,0 +1,5 @@
+import {z} from 'zod';
+import {requireUser} from '@/lib/auth';
+import {makeDocx} from '@/lib/documents/docx';
+export const runtime='nodejs';
+export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}) {const {id}=await params;if(!z.string().uuid().safeParse(id).success)return new Response('Not found',{status:404});const {db,user}=await requireUser();const {data,error}=await db.from('application_documents').select('kind,content').eq('id',id).eq('user_id',user.id).maybeSingle();if(error||!data)return new Response('Not found',{status:404});let buffer:Buffer;try{buffer=await makeDocx(data.content);}catch{return new Response('This document contains unsupported characters. Edit it and try again.',{status:422,headers:{'Cache-Control':'no-store'}});}return new Response(new Uint8Array(buffer),{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Content-Disposition':`attachment; filename="${data.kind==='cv'?'cv':'cover-letter'}.docx"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}

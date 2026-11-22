@@ -1,0 +1,16 @@
+'use server';
+import {cookies} from 'next/headers';
+import {redirect} from 'next/navigation';
+import {revalidatePath} from 'next/cache';
+import {z} from 'zod';
+import {requireUser} from '@/lib/auth';
+import {adminClient} from '@/lib/supabase/admin';
+import {authorizationUrl,googleConfigured,hashOAuthValue,kinds,randomOAuthValue} from '@/lib/integrations/google';
+import {seal} from '@/lib/integrations/crypto';
+import {stateContext} from '@/lib/integrations/google-store';
+import {microsoftAuthorizationUrl,microsoftConfigured,microsoftKinds} from '@/lib/integrations/microsoft';
+import {microsoftStateContext} from '@/lib/integrations/microsoft-store';
+export async function connectGoogle(form:FormData){const {user}=await requireUser();const kind=z.enum(kinds).safeParse(form.get('kind'));if(!kind.success||!googleConfigured())redirect('/settings/integrations?error=Google%20integration%20is%20not%20configured');let url='';try{const state=randomOAuthValue(),verifier=randomOAuthValue(),hash=hashOAuthValue(state);url=authorizationUrl(kind.data,state,verifier);const db=adminClient();const result=await db.rpc('start_integration_oauth',{p_user:user.id,p_kind:kind.data,p_hash:hash,p_verifier:seal(verifier,stateContext(user.id,hash))});if(result.error)throw new Error('State unavailable');const store=await cookies();store.set('google_oauth_state',state,{httpOnly:true,secure:new URL(url).protocol==='https:'&&new URL(process.env.NEXT_PUBLIC_APP_URL||'http://localhost').protocol==='https:',sameSite:'lax',path:'/api/integrations/google/callback',maxAge:600});}catch{redirect('/settings/integrations?error=Could%20not%20start%20Google%20authorization');}redirect(url);}
+export async function disconnectIntegration(form:FormData){const {user}=await requireUser();const kind=z.enum([...kinds,...microsoftKinds]).safeParse(form.get('kind'));if(!kind.success)redirect('/settings/integrations?error=Invalid%20integration');try{const {error}=await adminClient().rpc('disconnect_integration',{p_user:user.id,p_kind:kind.data});if(error)throw new Error('Disconnect unavailable');}catch{redirect('/settings/integrations?error=Could%20not%20disconnect');}revalidatePath('/settings/integrations');redirect('/settings/integrations?disconnected=1');}
+
+export async function connectMicrosoft(form:FormData){const {user}=await requireUser();const kind=z.enum(microsoftKinds).safeParse(form.get('kind'));if(!kind.success||!microsoftConfigured())redirect('/settings/integrations?error=Microsoft%20integration%20is%20not%20configured');let url='';try{const state=randomOAuthValue(),verifier=randomOAuthValue(),hash=hashOAuthValue(state);url=microsoftAuthorizationUrl(kind.data,state,verifier);const result=await adminClient().rpc('start_integration_oauth',{p_user:user.id,p_kind:kind.data,p_hash:hash,p_verifier:seal(verifier,microsoftStateContext(user.id,hash))});if(result.error)throw new Error('State unavailable');const store=await cookies();store.set('microsoft_oauth_state',state,{httpOnly:true,secure:new URL(process.env.NEXT_PUBLIC_APP_URL||'http://localhost').protocol==='https:',sameSite:'lax',path:'/api/integrations/microsoft/callback',maxAge:600});}catch{redirect('/settings/integrations?error=Could%20not%20start%20Microsoft%20authorization');}redirect(url);}

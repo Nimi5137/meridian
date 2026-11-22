@@ -1,0 +1,2 @@
+create function public.release_account_deletion_lease(p_user uuid,p_token uuid) returns void language sql security definer set search_path='' as $$ update public.account_deletion_jobs set lease_token=null,lease_until=null where user_id=p_user and lease_token=p_token $$;
+revoke all on function public.release_account_deletion_lease(uuid,uuid) from public;grant execute on function public.release_account_deletion_lease(uuid,uuid) to service_role;

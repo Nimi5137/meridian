@@ -1,0 +1,14 @@
+import {validAiModelName} from './ai/config';
+export type IntegrationStatus={name:string;purpose:string;required:boolean;state:'not configured'|'configured; unverified'|'not implemented';missing:string[]};
+export function isIntegrationAdmin(userId:string,env:Record<string,string|undefined>=process.env){return (env.INTEGRATION_ADMIN_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean).includes(userId);}
+export function readiness(env:Record<string,string|undefined>=process.env):IntegrationStatus[]{
+ const spec:[string,string,boolean,string[],boolean][]=[
+ ['Supabase','Database, authentication and storage',true,['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'],true],
+ ['Groq','AI text generation',false,['GROQ_API_KEY','GROQ_MODEL'],true],['OpenAI','AI text generation',false,['OPENAI_API_KEY','OPENAI_MODEL'],true],['Anthropic','AI text generation',false,['ANTHROPIC_API_KEY','ANTHROPIC_MODEL'],true],['Google AI','AI text generation',false,['GOOGLE_API_KEY','GOOGLE_MODEL'],true],
+ ['Stripe','Subscriptions and billing',false,['STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET','SUPABASE_SERVICE_ROLE_KEY','NEXT_PUBLIC_APP_URL'],true],
+ ['Job ingestion worker','Scheduled source imports',true,['SUPABASE_SERVICE_ROLE_KEY','NEXT_PUBLIC_SUPABASE_URL'],true],
+ ['CV malware scanner','App upload and extraction require a ClamAV Unix socket',true,['CV_SCANNER_SOCKET'],true],
+ ['CV parser service','CV extraction requires a separately isolated parser Unix socket',true,['CV_PARSER_SOCKET'],true],
+ ['Google Gmail / Calendar','Read-only mail metadata and primary calendar',false,['GOOGLE_OAUTH_CLIENT_ID','GOOGLE_OAUTH_CLIENT_SECRET','INTEGRATION_ENCRYPTION_KEY','SUPABASE_SERVICE_ROLE_KEY','NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_APP_URL'],true],['Microsoft Outlook / Calendar','Read-only basic mail and default calendar',false,['MICROSOFT_OAUTH_CLIENT_ID','MICROSOFT_OAUTH_CLIENT_SECRET','INTEGRATION_ENCRYPTION_KEY','SUPABASE_SERVICE_ROLE_KEY','NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_APP_URL'],true],['Google / Microsoft sign-in','External sign-in to the workspace',false,[],false]];
+ return spec.map(([name,purpose,required,vars,implemented])=>{const providerNames:Record<string,string>={Groq:'groq',OpenAI:'openai',Anthropic:'anthropic','Google AI':'google'};const missing=vars.filter(v=>{if(v.endsWith('_MODEL')){const value=env[v]||((env.AI_DEFAULT_PROVIDER||'groq')===providerNames[name]?env.AI_DEFAULT_MODEL:undefined);return !validAiModelName(value?.trim());}return !env[v]?.trim();});return {name,purpose,required,state:!implemented?'not implemented':missing.length?'not configured':'configured; unverified',missing};});
+}
