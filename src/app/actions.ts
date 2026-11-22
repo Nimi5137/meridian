@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { hasAiAccess } from '@/lib/billing/access';
 import {passwordInput} from '@/lib/auth-credentials';
 import {appOrigin} from '@/lib/billing/config';
+import {scanCv} from '@/lib/cv/malware-scan';
 const value = (f:FormData,k:string) => String(f.get(k) || '').trim();
 export async function authAction(form:FormData) {
  const mode=value(form,'mode'),email=value(form,'email');
@@ -57,6 +58,7 @@ export async function uploadOriginal(form:FormData) {
  const {db,user}=await requireUser(); const file=form.get('cv'); if(!(file instanceof File)||file.size===0||file.size>4*1024*1024) redirect('/profile?error=Choose%20a%20PDF%20or%20DOCX%20file%20under%204%20MiB');
  const bytes=new Uint8Array(await file.arrayBuffer()); const pdf=bytes.length>=5 && new TextDecoder().decode(bytes.slice(0,5))==='%PDF-'; const docx=bytes.length>=4 && bytes[0]===0x50 && bytes[1]===0x4b && bytes[2]===0x03 && bytes[3]===0x04; const ext=file.name.toLowerCase().split('.').pop();
  if(!((ext==='pdf'&&pdf)||(ext==='docx'&&docx))) redirect('/profile?error=File%20contents%20do%20not%20match%20a%20PDF%20or%20DOCX');
+ const scan=await scanCv(bytes);if(scan==='infected')redirect('/profile?error=The%20file%20was%20rejected%20by%20the%20malware%20scanner');if(scan!=='clean')redirect('/profile?error=Document%20scanning%20is%20unavailable.%20Upload%20is%20disabled');
  const mime=pdf?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; const path=`${user.id}/${crypto.randomUUID()}.${ext}`; const {error}=await db.storage.from('career-documents').upload(path,bytes,{contentType:mime,upsert:false}); if(error) redirect('/profile?error=Upload%20failed');
  const filename=file.name.replace(/[\x00-\x1f\x7f/\\]/g,'_').slice(0,200); const {error:recordError}=await db.from('original_cvs').insert({user_id:user.id,storage_path:path,filename,size_bytes:file.size}); if(recordError) {await db.storage.from('career-documents').remove([path]); redirect('/profile?error=Could%20not%20save%20the%20upload%20record');} revalidatePath('/profile'); redirect('/profile?uploaded=1');
 }
